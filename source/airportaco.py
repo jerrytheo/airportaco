@@ -28,10 +28,11 @@ class AirportACO:
     def run(self, max_iter=100, stable_iter=10):
         stable_ii = 0
         for ii in range(max_iter):
+            pickers = np.random.rand(len(self.ants), self.flightinfo.shape[0])
             for ant_ii, ant in enumerate(self.ants):
                 for flt_ii, flight in self.flightinfo.iterrows():
                     print('Iter: {:02d}  Ant: {:02d}'.format(ii, ant_ii), end='  ')
-                    ant.update()
+                    ant.update(pickers[ant_ii][flt_ii])
                     return
 
             # prev_best = self.global_best

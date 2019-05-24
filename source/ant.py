@@ -2,6 +2,7 @@ import datetime as dt
 import numpy as np
 
 from .utils import ceil_to_base
+import sys
 
 
 class AirportAnt:
@@ -17,17 +18,21 @@ class AirportAnt:
         self.prev_assignment    = 0
 
 
-    def update(self):
+    def update(self, picker):
 
         for flt_ii, flight in self.colony.flightinfo.iterrows():
             print('Flight: {}'.format(flight['flight']))
-            eta = self.get_weights(np.datetime64(flight['refuelat']), flight['terminal'])
+
+            refuelat = np.datetime64(flight['refuelat'])
+
+            eta = self.get_weights(refuelat, flight['terminal'])
             tau = self.colony.pheromones[flt_ii, self.prev_assignment]
 
             term = eta * tau
-            prob = term / np.sum(term)
+            cfrq = np.cumsum(term / np.sum(term))
 
-            return
+            print(flight)
+            self.assign_truck(np.argmax(picker < cfrq), flight['refuelat'], flight['terminal'])
 
 
     def get_weights(self, reftime, destterm):
@@ -40,6 +45,7 @@ class AirportAnt:
     def get_truck_availability(self, reftime, time_to_dest):
         assigned_p = self.truck_assignments == 'P'                              # Trucks assigned to parking.
         ready_time = reftime - time_to_dest.astype('timedelta64[m]')            # Time to get ready for heading out.
+
         reach_time = self.assignment_times + self.truck_intransit               # Time the truck reaches its destination.
         done_time = reach_time + self.colony.time_to_refuel                     # Time the truck completes refueling.
 
@@ -86,8 +92,12 @@ class AirportAnt:
 
 
     def get_time_to_dest(self, sources, destinations, cast=True):
-        time_to_dest = ceil_to_base(
-            self.colony.distmatrix.loc[sources, destinations].values / self.colony.truckspeed)
+        distances = self.colony.distmatrix.loc[sources, destinations]
+        if distances.ndim > 0:
+            distances = distances.values
+        time_to_dest = ceil_to_base(distances / self.colony.truckspeed)
+
         if cast:
             time_to_dest = time_to_dest.astype('timedelta64[m]')
+
         return time_to_dest
