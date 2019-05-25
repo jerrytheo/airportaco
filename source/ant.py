@@ -11,18 +11,17 @@ class AirportAnt:
         self.colony = colony
 
         self.current_schedule   = []
-        self.truck_assignments  = np.repeat('P', self.colony.ntrucks)
-        self.truck_intransit    = np.zeros(self.colony.ntrucks, dtype=np.timedelta64)
+        self.truck_assignments  = np.array(['P'] * self.colony.ntrucks, dtype=object)
+        self.truck_intransit    = np.zeros(self.colony.ntrucks, dtype='timedelta64[m]')
         self.assignment_times   = np.repeat(
             np.datetime64(colony.flightinfo.iloc[0, :]['refuelat']) - np.timedelta64(1, 'D'), self.colony.ntrucks)
         self.prev_assignment    = 0
+        self.total_distance     = 0
 
 
-    def update(self, picker):
+    def update(self, picker, prefix_log=''):
 
         for flt_ii, flight in self.colony.flightinfo.iterrows():
-            print('Flight: {}'.format(flight['flight']))
-
             refuelat = np.datetime64(flight['refuelat'])
 
             eta = self.get_weights(refuelat, flight['terminal'])
@@ -31,15 +30,24 @@ class AirportAnt:
             term = eta * tau
             cfrq = np.cumsum(term / np.sum(term))
 
-            print(flight)
-            self.assign_truck(np.argmax(picker < cfrq), flight['refuelat'], flight['terminal'])
+            truck_index = np.argmax(picker[flt_ii] < cfrq)                  # Randomly select a truck by cum. freq.
+            self.current_schedule.append(truck_index)
+
+            self.update_trucks(truck_index, refuelat, flight['terminal'])   # Update the assigned truck.
+            self.update_availability(refuelat, flight['terminal'])          # Update the other trucks.
+
+            array_display = ('{:>4}' * 13).format(*self.truck_assignments)
+            print(prefix_log + 'Flight: {:10}  {}'.format(flight['flight'], array_display))
 
 
     def get_weights(self, reftime, destterm):
-        time_to_dest = self.get_time_to_dest(self.truck_assignments, destterm, cast=False)
+        time_to_dest = self.get_time_to_dest(self.truck_assignments, destterm)
         availability = self.get_truck_availability(reftime, time_to_dest)
 
-        return (1 / time_to_dest) * availability
+        if np.any(time_to_dest.astype('float') == 0):
+            print(reftime, self.truck_assignments, destterm)
+            sys.exit()
+        return (1 / time_to_dest.astype('float')) * availability
 
 
     def get_truck_availability(self, reftime, time_to_dest):
@@ -62,16 +70,11 @@ class AirportAnt:
         return idle_trucks | done_trucks | overacheivers
 
 
-    def assign_truck(self, ind, reftime, destterm):
-        self.current_schedule.append(ind)
-
-        self.update_trucks(ind, reftime, destterm)
-        self.update_availability(reftime, destterm)
-
-
     def update_trucks(self, index, atime, destn):
+        time_to_dest = self.get_time_to_dest(self.truck_assignments[index], destn)
+        self.truck_intransit[index] = time_to_dest[0] if time_to_dest.shape[0] == 1 else time_to_dest
+
         self.assignment_times[index] = atime
-        self.truck_intransit[index] = self.get_time_to_dest(self.truck_assignments[index], destn)
         self.truck_assignments[index] = destn
 
 
@@ -91,13 +94,8 @@ class AirportAnt:
         self.assignment_times[trucks_reached] = reach_time[trucks_reached]
 
 
-    def get_time_to_dest(self, sources, destinations, cast=True):
-        distances = self.colony.distmatrix.loc[sources, destinations]
-        if distances.ndim > 0:
-            distances = distances.values
-        time_to_dest = ceil_to_base(distances / self.colony.truckspeed)
-
-        if cast:
-            time_to_dest = time_to_dest.astype('timedelta64[m]')
+    def get_time_to_dest(self, sources, destinations):
+        distances = np.atleast_1d(self.colony.distmatrix.loc[sources, destinations])
+        time_to_dest = ceil_to_base(distances / self.colony.truckspeed).astype('timedelta64[m]')
 
         return time_to_dest

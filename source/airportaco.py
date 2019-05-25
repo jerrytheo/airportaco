@@ -7,7 +7,7 @@ from .ant import AirportAnt
 class AirportACO:
 
     def __init__(self, flightinfo, distmatrix, nants=100, ntrucks=10,
-            truckspeed=100, time_to_refuel=20):
+            truckspeed=100, time_to_refuel=5):
 
         self.flightinfo = flightinfo
         self.distmatrix = distmatrix
@@ -27,13 +27,12 @@ class AirportACO:
 
     def run(self, max_iter=100, stable_iter=10):
         stable_ii = 0
+        status_text = 'Iter: {:02d}  Ant: {:02d}  '
         for ii in range(max_iter):
             pickers = np.random.rand(len(self.ants), self.flightinfo.shape[0])
             for ant_ii, ant in enumerate(self.ants):
-                for flt_ii, flight in self.flightinfo.iterrows():
-                    print('Iter: {:02d}  Ant: {:02d}'.format(ii, ant_ii), end='  ')
-                    ant.update(pickers[ant_ii][flt_ii])
-                    return
+                ant.update(pickers[ant_ii], status_text.format(ii, ant_ii))
+                return
 
             # prev_best = self.global_best
             # self.local_updates = np.array([ant.update() for ant in self.ants])
