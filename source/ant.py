@@ -10,43 +10,47 @@ class AirportAnt:
     def __init__(self, colony):
         self.colony = colony
 
-        self.current_schedule   = []
+    def generate_schedule(self, picker, prefix_log=''):
+        self.total_time         = 0
+        self.current_schedule   = np.ndarray(self.colony.nflights, dtype=int)
+        self.prev_assignment    = 0
         self.truck_assignments  = np.array(['P'] * self.colony.ntrucks, dtype=object)
         self.truck_intransit    = np.zeros(self.colony.ntrucks, dtype='timedelta64[m]')
         self.assignment_times   = np.repeat(
-            np.datetime64(colony.flightinfo.iloc[0, :]['refuelat']) - np.timedelta64(1, 'D'), self.colony.ntrucks)
-        self.prev_assignment    = 0
-        self.total_distance     = 0
-
-
-    def update(self, picker, prefix_log=''):
+            np.datetime64(self.colony.flightinfo.iloc[0, :]['refuelat']) - np.timedelta64(1, 'D'), self.colony.ntrucks)
 
         for flt_ii, flight in self.colony.flightinfo.iterrows():
             refuelat = np.datetime64(flight['refuelat'])
 
-            eta = self.get_weights(refuelat, flight['terminal'])
-            tau = self.colony.pheromones[flt_ii, self.prev_assignment]
+            eta = self.get_weights(refuelat, flight['terminal'])            # Weights we assign.
+            tau = self.colony.pheromones[flt_ii, self.prev_assignment]      # Weights ACO assigns.
 
             term = eta * tau
-            cfrq = np.cumsum(term / np.sum(term))
+            cfrq = np.cumsum(term / np.sum(term))                           # Cummulative frequency.
 
-            truck_index = np.argmax(picker[flt_ii] < cfrq)                  # Randomly select a truck by cum. freq.
-            self.current_schedule.append(truck_index)
+            truck_index = np.argmax(picker[flt_ii] < cfrq)                  # Randomly select a truck by cf.
+            self.current_schedule[flt_ii] = truck_index
 
             self.update_trucks(truck_index, refuelat, flight['terminal'])   # Update the assigned truck.
             self.update_availability(refuelat, flight['terminal'])          # Update the other trucks.
 
-            array_display = ('{:>4}' * 13).format(*self.truck_assignments)
-            print(prefix_log + 'Flight: {:10}  {}'.format(flight['flight'], array_display))
+            # array_display = ('{:>4}' * 13).format(*self.truck_assignments)
+            # print(prefix_log + 'Flight: {:>6}  {}'.format(flight['flight'], array_display), end='\r')
+
+            print(prefix_log + 'Total Time: {:>6}'.format(self.total_time), end='\r')
 
 
     def get_weights(self, reftime, destterm):
         time_to_dest = self.get_time_to_dest(self.truck_assignments, destterm)
         availability = self.get_truck_availability(reftime, time_to_dest)
 
+        # Exit if we are getting 0 time to destination.
         if np.any(time_to_dest.astype('float') == 0):
-            print(reftime, self.truck_assignments, destterm)
+            print(self.truck_assignments)
+            print(destterm)
+            print(self.colony.flightinfo[self.colony.flightinfo['refuelat'] == reftime])
             sys.exit()
+
         return (1 / time_to_dest.astype('float')) * availability
 
 
@@ -72,6 +76,8 @@ class AirportAnt:
 
     def update_trucks(self, index, atime, destn):
         time_to_dest = self.get_time_to_dest(self.truck_assignments[index], destn)
+
+        self.total_time += np.sum(time_to_dest.astype('float'))
         self.truck_intransit[index] = time_to_dest[0] if time_to_dest.shape[0] == 1 else time_to_dest
 
         self.assignment_times[index] = atime

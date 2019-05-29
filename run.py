@@ -6,10 +6,12 @@ import numpy as np
 
 FLIGHTS_FILE = "data/flight-schedule.csv"
 DISTANCES_FILE = "data/distances.csv"
-NUM_TRUCKS = 13
+NUM_TRUCKS = 20
 TRUCK_SPEED_KMPH = 20
 BOARDING_TIME = 10
 REFUELING_TIME = 5
+Q_STRENGTH = 2000
+NUM_ANTS = 20
 
 if __name__ == '__main__':
     system('cls')
@@ -24,6 +26,8 @@ if __name__ == '__main__':
     flights.reset_index(drop=True, inplace=True)
 
     speed_in_mpm = TRUCK_SPEED_KMPH * 1000 / 60
-    optimizer = airportaco.AirportACO(flights, distances, ntrucks=13, truckspeed=speed_in_mpm,
-        time_to_refuel=REFUELING_TIME)
+    optimizer = airportaco.AirportACO(flights, distances, nants=NUM_ANTS, qstr=Q_STRENGTH,
+        ntrucks=NUM_TRUCKS, truckspeed=speed_in_mpm, time_to_refuel=REFUELING_TIME)
     optimizer.run()
+    print(optimizer.gbest_path)
+    print(optimizer.gbest_cost)
